@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <!-- Hero Welcome -->
+    <div class="bg-primary text-white rounded-3 p-5 text-center mb-5">
+        <h1>Welcome back, {{ user.get_full_name|default:user.username }} 👋</h1>
+        <p class="lead">Explore, borrow, and discover books intelligently at GCTU Library</p>
+        <a href="{% url 'book_list' %}" class="btn btn-light btn-lg">📚 Browse All Books</a>
+        <a href="{% url 'my_library' %}" class="btn btn-outline-light btn-lg ms-3">📖 My Library</a>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row text-center mb-5 g-3">
+    <div class="col-md-4">
+        <div class="card border-primary shadow">
+            <div class="card-body">
+                <h2 class="text-primary">{{ total_books }}</h2>
+                <p class="fw-bold">📚 Total Books</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success shadow">
+            <div class="card-body">
+                <h2 class="text-success">{{ available_books }}</h2>
+                <p class="fw-bold">✅ Available Now</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning shadow">
+            <div class="card-body">
+                <h2 class="text-warning">{{ borrowed_books }}</h2>
+                <p class="fw-bold">📖 Borrowed by You</p>
+            </div>
+        </div>
+    </div>
+</div>
+    </div>
+
+    <!-- Recommended for You -->
+<h3 class="mb-3">Recommendations for You</h3>
+<div class="row g-3">
+    {% for book in recommended_books %}
+    <div class="col-md-4 col-lg-2">
+        <div class="card h-100 shadow hover-effect">
+            <!-- Fake Book Cover -->
+            <img src="https://picsum.photos/id/{{ forloop.counter|add:40 }}/300/200" class="card-img-top" alt="cover">
+            <div class="card-body text-center">
+                <h6 class="card-title">{{ book.title|truncatechars:28 }}</h6>
+                <p class="small text-muted">{{ book.author }}</p>
+                <span class="badge bg-primary">{{ book.category|default:"General" }}</span>
+            </div>
+            <div class="card-footer bg-white">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'book_detail' book.pk %}" class="btn btn-outline-primary btn-sm">View</a>
+                    {% if book.available > 0 %}
+                    <a href="{% url 'borrow_book' book.pk %}" class="btn btn-success btn-sm">Borrow Now</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+
+    <div class="text-center mt-4">
+        <a href="{% url 'book_list' %}" class="btn btn-primary">Browse Full Catalogue →</a>
+    </div>
+
+</div>
+{% endblock %}

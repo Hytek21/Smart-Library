@@ -1,0 +1,33 @@
+# Python
+_pycache_/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Django
+*.log
+*.pot
+*.pyc
+_pycache_/
+db.sqlite3
+media/
+
+# ML Models (large files - we can regenerate them)
+*.pkl
+*.joblib
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

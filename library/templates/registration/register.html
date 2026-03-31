@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white text-center">
+                    <h4>📝 Create New Student Account</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        {{ form.as_p }}
+                        <button type="submit" class="btn btn-success w-100">Register Account</button>
+                    </form>
+                    <hr>
+                    <p class="text-center">
+                        Already have an account?
+                        <a href="/accounts/login/" class="text-decoration-none">Login here</a>
+                    </p>
+                </div>
+            </div>
+            <p class="text-center mt-3">
+                <a href="{% url 'book_list' %}">← Back to Books</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
