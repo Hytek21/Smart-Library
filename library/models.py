@@ -24,11 +24,23 @@ class Book(models.Model):
         return self.available > 0
 
 class Borrowing(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('returned_pending', 'Returned Pending'),
+        ('returned', 'Returned'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
     borrow_date = models.DateTimeField(auto_now_add=True)
-    due_date = models.DateTimeField()
+    due_date = models.DateTimeField(null=True, blank=True)
     return_date = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    def __str__(self):
+        return f"{self.user.username} - {self.book.title} ({self.status})"
 
 class ClassificationFeedback(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
@@ -37,6 +49,6 @@ class ClassificationFeedback(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Feedback for {self.book.title}"
+        return f"Feedback for {self.book.title} - {self.corrected_category}"
 
 # Create your models here.

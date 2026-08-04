@@ -4,12 +4,13 @@ from django.utils import timezone
 from django.views.generic import ListView
 from django.db.models import Q
 from .models import Book
+from .models import Borrowing
 from django.views.generic import DetailView
 from django.contrib.auth.views import LoginView
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView
-from .models import Borrowing
+from .models import Book, Borrowing
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -25,18 +26,22 @@ import numpy as np
 @login_required
 def borrow_book(request, pk):
     book = get_object_or_404(Book, pk=pk)
-    if book.available > 0:
-        Borrowing.objects.create(
-            user=request.user,
-            book=book,
-            due_date=timezone.now() + timedelta(days=14)
-        )
-        book.available -= 1
-        book.save()
-        messages.success(request, f"You borrowed '{book.title}'!")
-    else:
-        messages.error(request, "Sorry, this book isn't available right now.")
-    return redirect('book_detail', pk=pk)
+
+    if book.available <= 0:
+        messages.error(request, '❌ This book is currently not available.')
+        return redirect('book_detail', pk=pk)
+
+    # Create pending request
+    Borrowing.objects.create(
+        user=request.user,
+        book=book,
+        due_date=timezone.now() + timedelta(days=14),
+        status='pending'
+    )
+
+    messages.success(request,f'✅ Borrow request for "{book.title}" has been submitted. Waiting for librarian approval.')
+    return redirect('my_library')
+
 
 class MyLibraryView(LoginRequiredMixin, ListView):
     model = Borrowing
@@ -44,25 +49,23 @@ class MyLibraryView(LoginRequiredMixin, ListView):
     context_object_name = 'borrowings'
 
     def get_queryset(self):
-        return Borrowing.objects.filter(user=self.request.user, return_date__isnull=True).order_by('due_date')
+        return Borrowing.objects.filter(
+            user=self.request.user,
+            return_date__isnull=True
+        ).order_by('due_date')
 
-class BookListView(ListView):
-    model = Book
-    template_name = 'library/book_list.html'
-    context_object_name = 'books'
-    paginate_by = 10
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        query = self.request.GET.get('q')
+        borrowings = context['borrowings']
 
-        if query:
-            queryset = queryset.filter(
-                Q(title__icontains=query) |
-                Q(author__icontains=query) |
-                Q(description__icontains=query)
-            )
-        return queryset
+        context['pending_borrowings'] = borrowings.filter(status='pending')
+        context['active_borrowings'] = borrowings.filter(status='approved')
+        context['returned_pending'] = borrowings.filter(status='returned_pending')
+        context['rejected_borrowings'] = borrowings.filter(status='rejected')
+
+        return context
+
 
 class BookDetailView(DetailView):
     model = Book
@@ -79,20 +82,24 @@ class RegisterView(SuccessMessageMixin, CreateView):
     success_message = "Account created."
 
 
-@login_required
-def return_book(request, pk):
-    borrowing = get_object_or_404(Borrowing, pk=pk, user=request.user)
+class BookListView(ListView):
+    model = Book
+    template_name = 'library/book_list.html'
+    context_object_name = 'books'
+    paginate_by = 12  # Number of books per page
 
-    if not borrowing.return_date:
-        borrowing.return_date = timezone.now()
-        borrowing.book.available += 1
-        borrowing.book.save()
-        borrowing.save()
-        messages.success(request, f'✅ You have successfully returned "{borrowing.book.title}"')
-    else:
-        messages.info(request, "This book was already returned.")
+    def get_queryset(self):
+        queryset = super().get_queryset().order_by('title')  # Sort by title by default
 
-    return redirect('my_library')
+        # Search functionality
+        query = self.request.GET.get('q')
+        if query:
+            queryset = queryset.filter(
+                Q(title__icontains=query) |
+                Q(author__icontains=query) |
+                Q(description__icontains=query)
+            )
+        return queryset
 
 
 class HomeView(LoginRequiredMixin, TemplateView):
@@ -101,54 +108,78 @@ class HomeView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Basic stats
+        # Updated Stats - recalculated every time
         context['total_books'] = Book.objects.count()
-        context['borrowed_books'] = Borrowing.objects.filter(
-            user=self.request.user, return_date__isnull=True
-        ).count()
         context['available_books'] = Book.objects.filter(available__gt=0).count()
+        context['borrowed_books'] = Borrowing.objects.filter(
+            user=self.request.user,
+            return_date__isnull=True
+        ).count()
 
-        # === ML-POWERED RECOMMENDATIONS ===
+        # === ML-Powered Recommendations ===
         try:
             vectorizer = joblib.load('tfidf_vectorizer.pkl')
 
-            # Get books the user has borrowed
-            user_borrowed = Borrowing.objects.filter(user=self.request.user)
-            borrowed_books = [b.book for b in user_borrowed]
+            user_borrowings = Borrowing.objects.filter(user=self.request.user)
 
-            if borrowed_books:
-                # Create text from borrowed books
-                borrowed_texts = [book.title + " " + (book.description or "") for book in borrowed_books]
-                borrowed_vectors = vectorizer.transform(borrowed_texts)
+            if user_borrowings.exists():
+                borrowed_texts = [
+                    f"{b.book.title} {b.book.description or ''}"
+                    for b in user_borrowings
+                ]
+                borrowed_vec = vectorizer.transform(borrowed_texts).mean(axis=0)
 
-                # Average the vectors
-                avg_vector = np.mean(borrowed_vectors.toarray(), axis=0).reshape(1, -1)
-
-                # Get all books for comparison
                 all_books = list(Book.objects.all())
-                all_texts = [book.title + " " + (book.description or "") for book in all_books]
-                all_vectors = vectorizer.transform(all_texts)
+                all_texts = [f"{book.title} {book.description or ''}" for book in all_books]
+                all_vec = vectorizer.transform(all_texts)
 
-                # Compute similarity
-                similarities = cosine_similarity(avg_vector, all_vectors).flatten()
+                similarities = cosine_similarity(borrowed_vec, all_vec).flatten()
 
-                # Get top 6 most similar books (excluding already borrowed)
-                similar_indices = similarities.argsort()[-12:][::-1]  # take more to filter
+                borrowed_ids = set(user_borrowings.values_list('book_id', flat=True))
 
                 recommended = []
-                for idx in similar_indices:
+                for idx in similarities.argsort()[-12:][::-1]:
                     book = all_books[idx]
-                    if book not in borrowed_books and book.available > 0:
+                    if book.id not in borrowed_ids:
                         recommended.append(book)
                     if len(recommended) >= 6:
                         break
+
+                context['recommended_books'] = recommended
+                context['recommendation_type'] = "Based on your borrowing history"
             else:
-                recommended = Book.objects.all()[:6]  # fallback for new users
+                context['recommended_books'] = Book.objects.all()[:6]
+                context['recommendation_type'] = "Popular Books"
 
-            context['recommended_books'] = recommended
-
-        except Exception as e:
-            # Fallback if model files missing
+        except Exception:
+            # Fallback
             context['recommended_books'] = Book.objects.all()[:6]
+            context['recommendation_type'] = "Popular Books"
 
         return context
+
+class BorrowingListView(ListView):
+    model = Borrowing
+    template_name = 'your_template.html'   # change if needed
+    context_object_name = 'borrowings'
+
+    def get_queryset(self):
+        # Only show approved borrowings to regular users
+        return Borrowing.objects.filter(status='approved')
+
+
+@login_required
+def request_return(request, pk):
+    borrowing = get_object_or_404(Borrowing, pk=pk, user=request.user)
+
+    if borrowing.status == 'approved':
+        borrowing.status = 'returned_pending'
+        borrowing.save()
+        messages.success(request,
+                         f'✅ Return request for "{borrowing.book.title}" has been submitted. Awaiting librarian approval.')
+    elif borrowing.status == 'returned_pending':
+        messages.info(request, "Return request is already pending approval.")
+    else:
+        messages.warning(request, "This book cannot be returned at this time.")
+
+    return redirect('my_library')

@@ -2,38 +2,98 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4">📚 My Borrowed Books ({{ borrowings|length }})</h2>
+    <h2 class="mb-4">📚 My Library</h2>
 
-    {% if borrowings %}
-        <div class="row">
-            {% for borrowing in borrowings %}
-            <div class="col-md-6 mb-3">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ borrowing.book.title }}</h5>
-                        <p class="card-text text-muted">By {{ borrowing.book.author }}</p>
-
-                        <p>
-                            <strong>Borrowed:</strong> {{ borrowing.borrow_date|date:"d M Y" }}<br>
-                            <strong>Due:</strong>
-                            <span class="{% if borrowing.due_date < now %}text-danger fw-bold{% endif %}">
-                                {{ borrowing.due_date|date:"d M Y" }}
-                            </span>
-                        </p>
-
-                        <a href="{% url 'return_book' borrowing.pk %}" class="btn btn-outline-danger btn-sm">
-                            Return Book
-                        </a>
-                    </div>
+    <!-- Pending Borrow Requests -->
+    {% if pending_borrowings %}
+    <h4 class="mt-4 mb-3 text-warning">⏳ Pending Approval ({{ pending_borrowings|length }})</h4>
+    <div class="row">
+        {% for borrowing in pending_borrowings %}
+        <div class="col-md-6 mb-3">
+            <div class="card border-warning">
+                <div class="card-body">
+                    <h5 class="card-title">{{ borrowing.book.title }}</h5>
+                    <p class="text-muted">By {{ borrowing.book.author }}</p>
+                    <p><strong>Requested:</strong> {{ borrowing.borrow_date|date:"d M Y" }}</p>
+                    <span class="badge bg-warning">Pending Librarian Approval</span>
                 </div>
             </div>
-            {% endfor %}
         </div>
-    {% else %}
-        <div class="alert alert-info">
-            You haven't borrowed any books yet.
-            <a href="{% url 'book_list' %}" class="alert-link">Browse books now →</a>
-        </div>
+        {% endfor %}
+    </div>
     {% endif %}
+
+    <!-- Active Borrowed Books -->
+    {% if active_borrowings %}
+    <h4 class="mt-5 mb-3 text-success">✅ Currently Borrowed ({{ active_borrowings|length }})</h4>
+    <div class="row">
+        {% for borrowing in active_borrowings %}
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ borrowing.book.title }}</h5>
+                    <p class="text-muted">By {{ borrowing.book.author }}</p>
+                    <p>
+                        <strong>Borrowed:</strong> {{ borrowing.borrow_date|date:"d M Y" }}<br>
+                        <strong>Due:</strong>
+                        <span class="{% if borrowing.due_date < now %}text-danger fw-bold{% endif %}">
+                            {{ borrowing.due_date|date:"d M Y" }}
+                        </span>
+                    </p>
+                    <a href="{% url 'request_return' borrowing.pk %}" class="btn btn-outline-danger btn-sm">
+                        Request Return
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Return Pending Approval -->
+    {% if returned_pending %}
+    <h4 class="mt-5 mb-3 text-warning">⏳ Return Requests Pending Approval ({{ returned_pending|length }})</h4>
+    <div class="row">
+        {% for borrowing in returned_pending %}
+        <div class="col-md-6 mb-3">
+            <div class="card border-warning">
+                <div class="card-body">
+                    <h5 class="card-title">{{ borrowing.book.title }}</h5>
+                    <p class="text-muted">By {{ borrowing.book.author }}</p>
+                    <span class="badge bg-warning">Return Pending Approval</span>
+                    <p class="small text-muted mt-2">Waiting for librarian confirmation...</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Rejected Requests -->
+    {% if rejected_borrowings %}
+    <h4 class="mt-5 mb-3 text-danger">❌ Rejected Requests ({{ rejected_borrowings|length }})</h4>
+    <div class="row">
+        {% for borrowing in rejected_borrowings %}
+        <div class="col-md-6 mb-3">
+            <div class="card border-danger">
+                <div class="card-body">
+                    <h5 class="card-title">{{ borrowing.book.title }}</h5>
+                    <p class="text-muted">By {{ borrowing.book.author }}</p>
+                    <span class="badge bg-danger">Request Rejected</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Empty State -->
+    {% if not pending_borrowings and not active_borrowings and not returned_pending and not rejected_borrowings %}
+    <div class="alert alert-info text-center">
+        You haven't borrowed any books yet.<br>
+        <a href="{% url 'book_list' %}" class="alert-link">Browse available books →</a>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}
