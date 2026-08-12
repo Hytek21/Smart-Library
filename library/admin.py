@@ -26,9 +26,10 @@ class BookAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 class BorrowingAdmin(admin.ModelAdmin):
-    list_display = ('user', 'book', 'status', 'borrow_date', 'due_date')
+    list_display = ('user', 'book', 'status', 'borrow_date', 'due_date', 'return_date')
     list_filter = ('status',)
-    actions = ['approve_borrowing', 'reject_borrowing', 'approve_return']
+    search_fields = ('user__username', 'book__title')
+    actions = ['approve_borrowing', 'reject_borrowing', 'approve_return', 'reject_return']
 
     def approve_borrowing(self, request, queryset):
         for borrowing in queryset.filter(status='pending'):
@@ -38,6 +39,11 @@ class BorrowingAdmin(admin.ModelAdmin):
             borrowing.save()
         self.message_user(request, "Selected borrowings have been approved.")
     approve_borrowing.short_description = "Approve selected borrowings"
+
+    def reject_borrowing(self, request, queryset):
+        updated = queryset.filter(status='pending').update(status='rejected')
+        self.message_user(request, f"{updated} borrowings have been rejected.")
+    reject_borrowing.short_description = "Reject selected borrowings"
 
     def approve_return(self, request, queryset):
         for borrowing in queryset.filter(status='returned_pending'):
@@ -49,6 +55,11 @@ class BorrowingAdmin(admin.ModelAdmin):
         self.message_user(request, "Selected returns approved.")
 
     approve_return.short_description = "Approve Return Requests"
+
+    def reject_return(self, request, queryset):
+        updated = queryset.filter(status='returned_pending').update(status='approved')
+        self.message_user(request, f"{updated} Return Requests have been rejected.")
+    reject_return.short_description = "Reject Return Requests"
 
 
 admin.site.register(Borrowing, BorrowingAdmin)

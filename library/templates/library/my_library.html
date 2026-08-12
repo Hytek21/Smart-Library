@@ -80,6 +80,10 @@
                     <h5 class="card-title">{{ borrowing.book.title }}</h5>
                     <p class="text-muted">By {{ borrowing.book.author }}</p>
                     <span class="badge bg-danger">Request Rejected</span>
+
+                    <a href="{% url 'dismiss_borrowing' borrowing.pk %}" class="btn btn-sm btn-outline-secondary mt-2">
+                        Dismiss
+                    </a>
                 </div>
             </div>
         </div>

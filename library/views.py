@@ -113,6 +113,7 @@ class HomeView(LoginRequiredMixin, TemplateView):
         context['available_books'] = Book.objects.filter(available__gt=0).count()
         context['borrowed_books'] = Borrowing.objects.filter(
             user=self.request.user,
+            status= 'approved',
             return_date__isnull=True
         ).count()
 
@@ -181,5 +182,22 @@ def request_return(request, pk):
         messages.info(request, "Return request is already pending approval.")
     else:
         messages.warning(request, "This book cannot be returned at this time.")
+
+    return redirect('my_library')
+
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from .models import Borrowing
+
+@login_required
+def dismiss_borrowing(request, pk):
+    borrowing = get_object_or_404(Borrowing, pk=pk, user=request.user)
+
+    if borrowing.status == 'rejected':
+        borrowing.delete()
+        messages.success(request, "Rejected request dismissed.")
+    else:
+        messages.warning(request, "Only rejected requests can be dismissed.")
 
     return redirect('my_library')

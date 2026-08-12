@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import BookListView, BookDetailView, HomeView, borrow_book, MyLibraryView, request_return
+from .views import BookListView, BookDetailView, HomeView, borrow_book, MyLibraryView, request_return, dismiss_borrowing
 
 urlpatterns = [
     path('', HomeView.as_view(), name='home'),
@@ -9,4 +9,5 @@ urlpatterns = [
     path('borrow/<int:pk>/', borrow_book, name='borrow_book'),
     path('books/', BookListView.as_view(), name='book_list'),
     path('return-request/<int:pk>/', request_return, name='request_return'),
+    path('dismiss/<int:pk>/', dismiss_borrowing, name='dismiss_borrowing'),
 ]
