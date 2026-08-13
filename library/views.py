@@ -86,19 +86,61 @@ class BookListView(ListView):
     model = Book
     template_name = 'library/book_list.html'
     context_object_name = 'books'
-    paginate_by = 12  # Number of books per page
+    paginate_by = 12
 
     def get_queryset(self):
-        queryset = super().get_queryset().order_by('title')  # Sort by title by default
-
-        # Search functionality
+        queryset = Book.objects.all().order_by('title')
         query = self.request.GET.get('q')
+
         if query:
-            queryset = queryset.filter(
-                Q(title__icontains=query) |
-                Q(author__icontains=query) |
-                Q(description__icontains=query)
-            )
+            try:
+                # Load the trained TF-IDF vectorizer
+                vectorizer = joblib.load('tfidf_vectorizer.pkl')
+
+                # Get all books
+                all_books = list(queryset)
+                if not all_books:
+                    return queryset
+
+                # Create text representation of books
+                book_texts = [
+                    f"{book.title} {book.author} {book.description or ''}"
+                    for book in all_books
+                ]
+
+                # Vectorize books and the search query
+                book_vectors = vectorizer.transform(book_texts)
+                query_vector = vectorizer.transform([query])
+
+                # Calculate cosine similarity
+                similarities = cosine_similarity(query_vector, book_vectors).flatten()
+
+                # Get top matching books (sorted by similarity)
+                # We keep books that have at least some similarity
+                scored_books = []
+                for idx, score in enumerate(similarities):
+                    if score > 0.05:  # minimum threshold
+                        scored_books.append((all_books[idx], score))
+
+                # Sort by similarity score (highest first)
+                scored_books.sort(key=lambda x: x[1], reverse=True)
+
+                # Extract only the Book objects
+                ranked_books = [book for book, score in scored_books]
+
+                # Convert back to a queryset-like list for the template
+                # (We return a list here)
+                return ranked_books
+
+            except Exception as e:
+                # Fallback to normal keyword search if model fails
+                print(f"Semantic search error: {e}")
+                queryset = queryset.filter(
+                    Q(title__icontains=query) |
+                    Q(author__icontains=query) |
+                    Q(description__icontains=query)
+                )
+
         return queryset
 
 
