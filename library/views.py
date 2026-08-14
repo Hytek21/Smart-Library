@@ -159,31 +159,45 @@ class HomeView(LoginRequiredMixin, TemplateView):
             return_date__isnull=True
         ).count()
 
-        # === ML-Powered Recommendations ===
+        # ML-Powered Recommendations
         try:
             vectorizer = joblib.load('tfidf_vectorizer.pkl')
 
-            user_borrowings = Borrowing.objects.filter(user=self.request.user)
+            # Only use APPROVED borrowings for recommendations
+            user_borrowings = Borrowing.objects.filter(
+                user=self.request.user,
+                status='approved',
+                return_date__isnull=True
+            ).select_related('book')
 
             if user_borrowings.exists():
+                # Create text from borrowed books
                 borrowed_texts = [
-                    f"{b.book.title} {b.book.description or ''}"
+                    f"{b.book.title} {b.book.author} {b.book.description or ''}"
                     for b in user_borrowings
                 ]
+
+                # Average vector of what the user has borrowed
                 borrowed_vec = vectorizer.transform(borrowed_texts).mean(axis=0)
 
+                # All books in the system
                 all_books = list(Book.objects.all())
-                all_texts = [f"{book.title} {book.description or ''}" for book in all_books]
+                all_texts = [
+                    f"{book.title} {book.author} {book.description or ''}"
+                    for book in all_books
+                ]
                 all_vec = vectorizer.transform(all_texts)
 
+                # Calculate similarity
                 similarities = cosine_similarity(borrowed_vec, all_vec).flatten()
 
+                # Exclude books the user already borrowed
                 borrowed_ids = set(user_borrowings.values_list('book_id', flat=True))
 
                 recommended = []
-                for idx in similarities.argsort()[-12:][::-1]:
+                for idx in similarities.argsort()[::-1]:  # Highest similarity first
                     book = all_books[idx]
-                    if book.id not in borrowed_ids:
+                    if book.id not in borrowed_ids and book.available > 0:
                         recommended.append(book)
                     if len(recommended) >= 6:
                         break
@@ -191,19 +205,20 @@ class HomeView(LoginRequiredMixin, TemplateView):
                 context['recommended_books'] = recommended
                 context['recommendation_type'] = "Based on your borrowing history"
             else:
-                context['recommended_books'] = Book.objects.all()[:6]
+                # Fallback when user has no approved borrowings yet
+                context['recommended_books'] = Book.objects.filter(available__gt=0).order_by('?')[:6]
                 context['recommendation_type'] = "Popular Books"
 
-        except Exception:
-            # Fallback
-            context['recommended_books'] = Book.objects.all()[:6]
+        except Exception as e:
+            print(f"Recommendation error: {e}")
+            context['recommended_books'] = Book.objects.filter(available__gt=0)[:6]
             context['recommendation_type'] = "Popular Books"
 
         return context
 
 class BorrowingListView(ListView):
     model = Borrowing
-    template_name = 'your_template.html'   # change if needed
+    template_name = 'your_template.html'
     context_object_name = 'borrowings'
 
     def get_queryset(self):

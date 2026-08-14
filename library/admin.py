@@ -1,5 +1,5 @@
 from django.utils import timezone
-
+from django.contrib import messages
 from django.contrib import admin
 from .models import Category, Book, Borrowing, ClassificationFeedback
 import joblib
@@ -7,21 +7,42 @@ from sklearn.feature_extraction.text import TfidfVectorizer  # Already installed
 
 
 class BookAdmin(admin.ModelAdmin):
+    list_display = ('title', 'author', 'category', 'available', 'quantity')
+    list_filter = ('category',)
+    search_fields = ('title', 'author')
+
     def save_model(self, request, obj, form, change):
-        if change and 'category' in form.changed_data:
-            # Get original (before save) to compare
-            original = Book.objects.get(pk=obj.pk)
-            original_cat = original.category.name if original.category else None
-            new_cat = obj.category.name if obj.category else None
+        # Only auto-classify if no category is selected
+        if not obj.category:
+            try:
+                model = joblib.load('book_classifier.pkl')
 
-            if original_cat != new_cat:
-                # Log the correction (predicted = original auto-filled, corrected = manual)
-                ClassificationFeedback.objects.create(
-                    book=obj,
-                    predicted_category=original_cat or "None",
-                    corrected_category=new_cat or "None"
+                text = f"{obj.title} {obj.description or ''}"
+                predicted_category_name = model.predict([text])[0]
+
+                # Try to find the category in the database
+                category = Category.objects.filter(name__iexact=predicted_category_name).first()
+
+                if category:
+                    obj.category = category
+                    messages.success(
+                        request,
+                        f"✅ Auto-classified as: {category.name}"
+                    )
+                else:
+                    # Create the category if it doesn't exist
+                    category = Category.objects.create(name=predicted_category_name)
+                    obj.category = category
+                    messages.info(
+                        request,
+                        f"ℹ️ New category created and assigned: {category.name}"
+                    )
+
+            except Exception as e:
+                messages.warning(
+                    request,
+                    f"⚠️ Could not auto-classify the book. Error: {str(e)}"
                 )
-
 
         super().save_model(request, obj, form, change)
 
