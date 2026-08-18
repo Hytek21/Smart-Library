@@ -92,56 +92,67 @@ class BookListView(ListView):
         queryset = Book.objects.all().order_by('title')
         query = self.request.GET.get('q')
 
-        if query:
-            try:
-                # Load the trained TF-IDF vectorizer
-                vectorizer = joblib.load('tfidf_vectorizer.pkl')
+        # Default values
+        self.no_exact_match = False
+        self.search_query = ''
+        self.best_score = 0
 
-                # Get all books
-                all_books = list(queryset)
-                if not all_books:
-                    return queryset
+        if not query:
+            return queryset
 
-                # Create text representation of books
-                book_texts = [
-                    f"{book.title} {book.author} {book.description or ''}"
-                    for book in all_books
-                ]
+        try:
+            vectorizer = joblib.load('tfidf_vectorizer.pkl')
 
-                # Vectorize books and the search query
-                book_vectors = vectorizer.transform(book_texts)
-                query_vector = vectorizer.transform([query])
+            all_books = list(Book.objects.all())
+            if not all_books:
+                return queryset
 
-                # Calculate cosine similarity
-                similarities = cosine_similarity(query_vector, book_vectors).flatten()
+            book_texts = [
+                f"{book.title} {book.author} {book.description or ''}"
+                for book in all_books
+            ]
 
-                # Get top matching books (sorted by similarity)
-                # We keep books that have at least some similarity
-                scored_books = []
-                for idx, score in enumerate(similarities):
-                    if score > 0.05:  # minimum threshold
-                        scored_books.append((all_books[idx], score))
+            book_vectors = vectorizer.transform(book_texts)
+            query_vector = vectorizer.transform([query.lower()])
 
-                # Sort by similarity score (highest first)
-                scored_books.sort(key=lambda x: x[1], reverse=True)
+            similarities = cosine_similarity(query_vector, book_vectors).flatten()
 
-                # Extract only the Book objects
-                ranked_books = [book for book, score in scored_books]
+            top_indices = similarities.argsort()[::-1]
 
-                # Convert back to a queryset-like list for the template
-                # (We return a list here)
-                return ranked_books
+            scored_books = []
+            for idx in top_indices:
+                score = similarities[idx]
+                book = all_books[idx]
 
-            except Exception as e:
-                # Fallback to normal keyword search if model fails
-                print(f"Semantic search error: {e}")
-                queryset = queryset.filter(
-                    Q(title__icontains=query) |
-                    Q(author__icontains=query) |
-                    Q(description__icontains=query)
-                )
+                if score > 0.01 or len(scored_books) < 6:
+                    scored_books.append((book, score))
+                if len(scored_books) >= 8:
+                    break
 
-        return queryset
+            ranked_books = [book for book, score in scored_books]
+
+            best_score = float(similarities.max()) if len(similarities) > 0 else 0
+            self.no_exact_match = best_score < 0.12
+            self.search_query = query
+            self.best_score = round(best_score * 100, 1)
+
+            return ranked_books
+
+        except Exception as e:
+            print(f"Semantic search error: {e}")
+            return queryset.filter(
+                Q(title__icontains=query) |
+                Q(author__icontains=query) |
+                Q(description__icontains=query)
+            )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['no_exact_match'] = getattr(self, 'no_exact_match', False)
+        context['search_query'] = getattr(self, 'search_query', '')
+        context['best_score'] = getattr(self, 'best_score', 0)
+        return context
+
 
 
 class HomeView(LoginRequiredMixin, TemplateView):

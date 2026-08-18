@@ -3,6 +3,10 @@ from django.contrib import messages
 from django.contrib import admin
 from .models import Category, Book, Borrowing, ClassificationFeedback
 import joblib
+from django.contrib.auth.models import Group
+
+
+admin.site.unregister(Group)
 from sklearn.feature_extraction.text import TfidfVectorizer  # Already installed
 
 

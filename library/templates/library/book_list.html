@@ -12,6 +12,14 @@
       </div>
     </form>
 
+    {% if no_exact_match %}
+    <div class="alert alert-info">
+      <strong>No exact match found</strong> for "{{ search_query }}"
+      (best similarity: {{ best_score }}%).<br>
+      Showing similar books:
+    </div>
+    {% endif %}
+
     {% if books %}
       <div class="row">
         {% for book in books %}
