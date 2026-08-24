@@ -92,7 +92,6 @@ class BookListView(ListView):
         queryset = Book.objects.all().order_by('title')
         query = self.request.GET.get('q')
 
-        # Default values
         self.no_exact_match = False
         self.search_query = ''
         self.best_score = 0
@@ -100,51 +99,76 @@ class BookListView(ListView):
         if not query:
             return queryset
 
+        query = query.strip().lower()
+
         try:
             vectorizer = joblib.load('tfidf_vectorizer.pkl')
-
             all_books = list(Book.objects.all())
+
             if not all_books:
                 return queryset
 
+            # ===== 1. Semantic Search =====
             book_texts = [
                 f"{book.title} {book.author} {book.description or ''}"
                 for book in all_books
             ]
 
             book_vectors = vectorizer.transform(book_texts)
-            query_vector = vectorizer.transform([query.lower()])
+            query_vector = vectorizer.transform([query])
 
             similarities = cosine_similarity(query_vector, book_vectors).flatten()
 
-            top_indices = similarities.argsort()[::-1]
+            # ===== 2. Flexible Keyword Matching =====
+            # Split the query into words and search for partial matches
+            words = query.split()
+            keyword_q = Q()
+            for word in words:
+                if len(word) > 2:  # ignore very short words
+                    keyword_q |= (
+                        Q(title__icontains=word) |
+                        Q(author__icontains=word) |
+                        Q(description__icontains=word)
+                    )
 
+            keyword_matches = set(Book.objects.filter(keyword_q).values_list('id', flat=True))
+
+            # ===== 3. Combine both methods =====
             scored_books = []
-            for idx in top_indices:
+            for idx, book in enumerate(all_books):
                 score = similarities[idx]
-                book = all_books[idx]
 
-                if score > 0.01 or len(scored_books) < 6:
+                # Boost score if it also matches keywords
+                if book.id in keyword_matches:
+                    score += 0.15
+
+                if score > 0.05 or book.id in keyword_matches:
                     scored_books.append((book, score))
-                if len(scored_books) >= 8:
-                    break
 
-            ranked_books = [book for book, score in scored_books]
+            # Sort by final score
+            scored_books.sort(key=lambda x: x[1], reverse=True)
 
-            best_score = float(similarities.max()) if len(similarities) > 0 else 0
-            self.no_exact_match = best_score < 0.12
+            ranked_books = [book for book, score in scored_books[:12]]
+
+            best_score = max([s for b, s in scored_books], default=0)
+            self.no_exact_match = best_score < 0.18
             self.search_query = query
             self.best_score = round(best_score * 100, 1)
 
             return ranked_books
 
         except Exception as e:
-            print(f"Semantic search error: {e}")
-            return queryset.filter(
-                Q(title__icontains=query) |
-                Q(author__icontains=query) |
-                Q(description__icontains=query)
-            )
+            print(f"Search error: {e}")
+            # Fallback to simple flexible search
+            words = query.split()
+            q_objects = Q()
+            for word in words:
+                q_objects |= (
+                    Q(title__icontains=word) |
+                    Q(author__icontains=word) |
+                    Q(description__icontains=word)
+                )
+            return queryset.filter(q_objects)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
