@@ -13,12 +13,23 @@
     </form>
 
     {% if no_exact_match %}
-    <div class="alert alert-info">
-      <strong>No exact match found</strong> for "{{ search_query }}"
-      (best similarity: {{ best_score }}%).<br>
-      Showing similar books:
+    <div class="alert alert-warning shadow-sm">
+        <h5 class="alert-heading">No exact match found</h5>
+        <p class="mb-1">
+            We couldn’t find any books that exactly match
+            “<strong>{{ search_query }}</strong>”.
+        </p>
+        <p class="mb-0">
+            Showing <strong>recommended similar books</strong> based on semantic similarity
+            {% if best_score %}(best match score: {{ best_score }}%){% endif %}.
+        </p>
     </div>
     {% endif %}
+
+    {% if no_exact_match %}
+        <span class="badge bg-info text-dark mb-2">Similar Recommendation</span>
+    {% endif %}
+
 
     {% if books %}
       <div class="row">

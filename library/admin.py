@@ -1,6 +1,9 @@
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
+from .models import UserProfile
 from .models import Category, Book, Borrowing, ClassificationFeedback
 import joblib
 from django.contrib.auth.models import Group
@@ -9,6 +12,21 @@ from django.contrib.auth.models import Group
 admin.site.unregister(Group)
 from sklearn.feature_extraction.text import TfidfVectorizer  # Already installed
 
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    verbose_name_plural = 'Profile'
+
+class CustomUserAdmin(BaseUserAdmin):
+    inlines = [UserProfileInline]
+    list_display = ('username', 'email', 'get_phone', 'is_staff', 'is_active')
+
+    def get_phone(self, obj):
+        try:
+            return obj.profile.phone_number
+        except UserProfile.DoesNotExist:
+            return "-"
+    get_phone.short_description = 'Phone Number'
 
 class BookAdmin(admin.ModelAdmin):
     list_display = ('title', 'author', 'category', 'available', 'quantity')
@@ -90,5 +108,8 @@ class BorrowingAdmin(admin.ModelAdmin):
 admin.site.register(Borrowing, BorrowingAdmin)
 admin.site.register(Book, BookAdmin)
 admin.site.register(Category)
-admin.site.register(ClassificationFeedback)  # So you can view feedbacks in admin
+admin.site.register(ClassificationFeedback)
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
+admin.site.register(UserProfile)
 

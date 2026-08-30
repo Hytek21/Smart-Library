@@ -1,71 +1,110 @@
+print("1. Script started...")
+
 import os
 import django
 import joblib
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import LinearSVC
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.pipeline import Pipeline
+import re
 from collections import Counter
+
+print("2. Basic imports successful")
+
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.svm import LinearSVC
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import accuracy_score, classification_report
+    from sklearn.pipeline import Pipeline
+    print("3. Scikit-learn imported successfully")
+except Exception as e:
+    print("ERROR importing scikit-learn:", e)
+    exit()
+
+try:
+    from nltk.stem import PorterStemmer
+    from nltk.tokenize import word_tokenize
+    import nltk
+    print("4. NLTK imported successfully")
+except Exception as e:
+    print("ERROR importing NLTK:", e)
+    exit()
+
+# Download NLTK data
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    print("Downloading punkt...")
+    nltk.download('punkt')
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    print("Downloading stopwords...")
+    nltk.download('stopwords')
+
+print("5. NLTK data ready")
 
 # Setup Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "library_system.settings")
 django.setup()
+print("6. Django setup completed")
 
 from library.models import Book, ClassificationFeedback
+print("7. Models imported successfully")
 
+stemmer = PorterStemmer()
 
-def clean_text(text):
+def clean_and_stem(text):
     if not isinstance(text, str):
         return ""
-    return text.lower().strip()
 
+    text = text.lower()
+    text = re.sub(r'[^a-zA-Z\s]', ' ', text)
+
+    tokens = text.split()
+    stemmed = [stemmer.stem(token) for token in tokens if len(token) > 2]
+    return " ".join(stemmed)
 
 def train_model():
-    print("🚀 Starting model training...")
+    print("\n8. Starting training process...")
 
-    # 1. Collect data from database
-    books = Book.objects.exclude(category__isnull=True).exclude(category__name="")
+    books = Book.objects.filter(category__isnull=False)
+    print(f"9. Found {books.count()} books with categories")
 
     texts = []
     labels = []
 
     for book in books:
-        text = f"{book.title} {book.description or ''}"
-        texts.append(clean_text(text))
+        raw_text = f"{book.title} {book.description or ''}"
+        texts.append(clean_and_stem(raw_text))
         labels.append(book.category.name)
 
-    print(f"📚 Loaded {len(texts)} books from database")
+    print(f"10. Processed {len(texts)} books")
 
-    # 2. Add feedback corrections
     feedbacks = ClassificationFeedback.objects.all()
     feedback_count = 0
-
     for fb in feedbacks:
-        text = f"{fb.book.title} {fb.book.description or ''}"
-        texts.append(clean_text(text))
+        raw_text = f"{fb.book.title} {fb.book.description or ''}"
+        texts.append(clean_and_stem(raw_text))
         labels.append(fb.corrected_category)
         feedback_count += 1
 
-    print(f"✅ Added {feedback_count} corrections from feedback")
+    print(f"11. Added {feedback_count} feedback corrections")
 
     if len(texts) < 5:
-        print("❌ Not enough data to train. Please add more books.")
+        print("Not enough data to train.")
         return
 
-    # Show class distribution
-    print("\n📊 Category distribution:")
+    print("\nCategory distribution:")
     for cat, count in Counter(labels).most_common():
-        print(f"  - {cat}: {count}")
+        print(f"   - {cat}: {count}")
 
-    # 3. Create improved pipeline
     model = Pipeline([
         ('tfidf', TfidfVectorizer(
-            max_features=5000,
+            max_features=7000,
             ngram_range=(1, 2),
             min_df=1,
-            max_df=0.95,
-            stop_words='english'
+            max_df=0.9,
+            sublinear_tf=True
         )),
         ('clf', LinearSVC(
             class_weight='balanced',
@@ -74,30 +113,28 @@ def train_model():
         ))
     ])
 
-    # 4. Train / Test split (without stratify)
     X_train, X_test, y_train, y_test = train_test_split(
         texts, labels, test_size=0.2, random_state=42
     )
 
-    print("\n🧠 Training model...")
+    print("\n12. Training the model... Please wait...")
     model.fit(X_train, y_train)
 
-    # 5. Evaluate
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
 
-    print(f"\n🎯 New Accuracy: {accuracy * 100:.2f}%")
-    print("\n📊 Detailed Report:")
+    print("\n" + "="*50)
+    print(f"MODEL ACCURACY: {accuracy * 100:.2f}%")
+    print("="*50)
+
+    print("\nClassification Report:")
     print(classification_report(y_test, y_pred, zero_division=0))
 
-    # 6. Save model
     joblib.dump(model, 'book_classifier.pkl')
-    print("\n✅ Updated model saved as 'book_classifier.pkl'!")
+    joblib.dump(model.named_steps['tfidf'], 'tfidf_vectorizer.pkl')
 
-    vectorizer = model.named_steps['tfidf']
-    joblib.dump(vectorizer, 'tfidf_vectorizer.pkl')
-    print("✅ Vectorizer also saved!")
-
+    print("\nModel saved successfully!")
+    print("Training completed.")
 
 if __name__ == "__main__":
     train_model()
