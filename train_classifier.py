@@ -21,25 +21,17 @@ except Exception as e:
 
 try:
     from nltk.stem import PorterStemmer
-    from nltk.tokenize import word_tokenize
     import nltk
     print("4. NLTK imported successfully")
 except Exception as e:
     print("ERROR importing NLTK:", e)
     exit()
 
-# Download NLTK data
+# Download NLTK data if needed
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
-    print("Downloading punkt...")
     nltk.download('punkt')
-
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    print("Downloading stopwords...")
-    nltk.download('stopwords')
 
 print("5. NLTK data ready")
 
@@ -56,10 +48,8 @@ stemmer = PorterStemmer()
 def clean_and_stem(text):
     if not isinstance(text, str):
         return ""
-
     text = text.lower()
     text = re.sub(r'[^a-zA-Z\s]', ' ', text)
-
     tokens = text.split()
     stemmed = [stemmer.stem(token) for token in tokens if len(token) > 2]
     return " ".join(stemmed)
@@ -74,16 +64,17 @@ def train_model():
     labels = []
 
     for book in books:
-        raw_text = f"{book.title} {book.description or ''}"
+        raw_text = f"{book.title} {book.author or ''} {book.description or ''}"
         texts.append(clean_and_stem(raw_text))
         labels.append(book.category.name)
 
     print(f"10. Processed {len(texts)} books")
 
+    # Add feedback corrections
     feedbacks = ClassificationFeedback.objects.all()
     feedback_count = 0
     for fb in feedbacks:
-        raw_text = f"{fb.book.title} {fb.book.description or ''}"
+        raw_text = f"{fb.book.title} {fb.book.author or ''} {fb.book.description or ''}"
         texts.append(clean_and_stem(raw_text))
         labels.append(fb.corrected_category)
         feedback_count += 1
@@ -130,10 +121,11 @@ def train_model():
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred, zero_division=0))
 
+    # Save model and vectorizer
     joblib.dump(model, 'book_classifier.pkl')
     joblib.dump(model.named_steps['tfidf'], 'tfidf_vectorizer.pkl')
 
-    print("\nModel saved successfully!")
+    print("\nModel and vectorizer saved successfully!")
     print("Training completed.")
 
 if __name__ == "__main__":

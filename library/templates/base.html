@@ -10,7 +10,10 @@
     <!-- Navbar (already good, but improved) -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-gradient" style="background: linear-gradient(to right, #0d6efd, #6610f2);">
     <div class="container">
-        <a class="navbar-brand fw-bold" href="{% url 'home' %}">📖 GCTU Smart Library</a>
+        <a class="navbar-brand fw-bold d-flex align-items-center text-dark" href="{% url 'home' %}">
+            <i class="bi bi-book me-2"></i>
+            📖 GCTU Smart Library
+        </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
@@ -18,14 +21,14 @@
 
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto">
-                <li class="nav-item"><a class="nav-link" href="{% url 'book_list' %}">Browse Books</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'my_library' %}">My Library</a></li>
+                <li class="nav-item"><a class="nav-link text-dark fw-semibold" href="{% url 'book_list' %}">Browse Books</a></li>
+                <li class="nav-item"><a class="nav-link text-dark fw-semibold" href="{% url 'my_library' %}">My Library</a></li>
             </ul>
 
             <ul class="navbar-nav">
                 {% if user.is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle text-dark" href="#" data-bs-toggle="dropdown">
                             👤 {{ user.get_full_name|default:user.username }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
@@ -41,8 +44,8 @@
                         </ul>
                     </li>
                 {% else %}
-                    <li class="nav-item"><a class="nav-link" href="/accounts/login/">🔑 Login</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/accounts/register/">📝 Register</a></li>
+                    <li class="nav-item"><a class="nav-link text-dark" href="/accounts/login/">🔑 Login</a></li>
+                    <li class="nav-item"><a class="nav-link text-dark" href="/accounts/register/">📝 Register</a></li>
                 {% endif %}
             </ul>
         </div>
